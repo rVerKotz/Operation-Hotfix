@@ -11,18 +11,10 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
+import type { Shipment } from '@/types/shipment'
 import { ColumnDef } from '@tanstack/react-table'
 import { MoreHorizontal } from 'lucide-react'
-
-export type Shipment = {
-  id: string
-  created_at: string
-  status: string
-  cargo_details: {
-    item: string
-    weight_kg: number
-  }
-}
+import { toast } from 'sonner'
 
 export const columns: ColumnDef<Shipment>[] = [
   {
@@ -52,6 +44,8 @@ export const columns: ColumnDef<Shipment>[] = [
     header: 'Cargo',
     cell: ({ row }) => {
       const cargo = row.getValue<Shipment['cargo_details']>('cargo_details')
+      if (!cargo)
+        return <span className='text-sm text-muted-foreground'>—</span>
       return (
         <div className='text-sm'>
           <p className='font-medium'>{cargo.item}</p>
@@ -65,6 +59,13 @@ export const columns: ColumnDef<Shipment>[] = [
     cell: ({ row }) => {
       const shipment = row.original
 
+      const handleStatusUpdate = async (status: string) => {
+        const result = await updateShipmentStatus(shipment.id, status)
+        if (result.success) {
+          toast.success('Status updated successfully')
+        }
+      }
+
       return (
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
@@ -76,19 +77,13 @@ export const columns: ColumnDef<Shipment>[] = [
           <DropdownMenuContent align='end'>
             <DropdownMenuLabel>Update Status</DropdownMenuLabel>
             <DropdownMenuSeparator />
-            <DropdownMenuItem
-              onClick={() => updateShipmentStatus(shipment.id, 'Pending')}
-            >
+            <DropdownMenuItem onClick={() => handleStatusUpdate('Pending')}>
               Pending
             </DropdownMenuItem>
-            <DropdownMenuItem
-              onClick={() => updateShipmentStatus(shipment.id, 'In Transit')}
-            >
+            <DropdownMenuItem onClick={() => handleStatusUpdate('In Transit')}>
               In Transit
             </DropdownMenuItem>
-            <DropdownMenuItem
-              onClick={() => updateShipmentStatus(shipment.id, 'Delivered')}
-            >
+            <DropdownMenuItem onClick={() => handleStatusUpdate('Delivered')}>
               Delivered
             </DropdownMenuItem>
           </DropdownMenuContent>

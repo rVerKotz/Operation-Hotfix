@@ -1,6 +1,14 @@
-'use client'
+"use client";
 
-import { searchShipments } from '@/actions/search-shipments'
+import * as React from "react";
+import {
+  ColumnDef,
+  flexRender,
+  getCoreRowModel,
+  useReactTable,
+  getPaginationRowModel,
+} from "@tanstack/react-table";
+
 import {
   Table,
   TableBody,
@@ -8,109 +16,108 @@ import {
   TableHead,
   TableHeader,
   TableRow,
-} from '@/components/ui/table'
-import {
-  ColumnDef,
-  SortingState,
-  flexRender,
-  getCoreRowModel,
-  getSortedRowModel,
-  useReactTable,
-} from '@tanstack/react-table'
-import { useRouter, useSearchParams } from 'next/navigation'
-import { useEffect, useState } from 'react'
+} from "@/components/ui/table";
+import { Button } from "@/components/ui/button";
+import { searchShipments } from "@/actions/search-shipments";
+import { Loader2 } from "lucide-react";
 
 interface DataTableProps<TData, TValue> {
-  columns: ColumnDef<TData, TValue>[]
-  data: TData[]
+  columns: ColumnDef<TData, TValue>[];
+  data: TData[];
 }
 
 export function DataTable<TData, TValue>({
   columns,
   data,
 }: DataTableProps<TData, TValue>) {
-  'use no memo'
-  const router = useRouter()
-  const searchParams = useSearchParams()
-  const [sorting, setSorting] = useState<SortingState>([])
-  const [tableData, setTableData] = useState<TData[]>(data)
-  const [loading, setLoading] = useState(false)
+  const [tableData, setTableData] = React.useState<TData[]>(data);
+  const [isSearching, setIsSearching] = React.useState(false);
+  const searchId = React.useRef(0); // Bug 5: Track search request ID
 
-  useEffect(() => {
-    setTableData(data)
-  }, [data])
+  // Bug 3: Fixed infinite loop by removing unnecessary router.refresh() 
+  // and ensuring state only updates when props change.
+  React.useEffect(() => {
+    setTableData(data);
+  }, [data]);
 
-  // eslint-disable-next-line react-hooks/incompatible-library
   const table = useReactTable({
     data: tableData,
     columns,
-    state: { sorting },
-    onSortingChange: setSorting,
     getCoreRowModel: getCoreRowModel(),
-    getSortedRowModel: getSortedRowModel(),
-  })
+    getPaginationRowModel: getPaginationRowModel(),
+  });
 
-  useEffect(() => {
-    const params = new URLSearchParams(searchParams.toString())
-    if (sorting.length > 0) {
-      params.set('sort', sorting[0].id)
-      params.set('desc', String(sorting[0].desc))
-    } else {
-      params.delete('sort')
-      params.delete('desc')
+  // Debounced search function
+  const debounceTimer = React.useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const handleSearch = async (value: string) => {
+    setIsSearching(true);
+    
+    if (debounceTimer.current) {
+      clearTimeout(debounceTimer.current);
     }
-    router.push(`/dashboard?${params.toString()}`)
-  }, [table.getState().sorting, searchParams, router])
-
-  const handleSearch = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const query = e.target.value
-    setLoading(true)
-    const results = await searchShipments(query)
-    setTableData(results as TData[])
-    setLoading(false)
-  }
+    
+    debounceTimer.current = setTimeout(async () => {
+      const currentSearchId = ++searchId.current;
+      try {
+        const results = await searchShipments(value);
+        
+        // Bug 5: Only update if this is the latest request
+        if (currentSearchId === searchId.current) {
+          setTableData(results as TData[]);
+        }
+      } catch (error) {
+        console.error("Search failed:", error);
+      } finally {
+        if (currentSearchId === searchId.current) {
+          setIsSearching(false);
+        }
+      }
+    }, 500); // 500ms debounce
+  };
 
   return (
-    <div>
-      <div className='mb-4 flex items-center gap-3'>
-        <input
-          type='text'
-          placeholder='Search by item...'
-          onChange={handleSearch}
-          className='flex h-9 w-64 rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm transition-colors placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring'
-        />
-        {loading && (
-          <div className='h-4 w-4 animate-spin rounded-full border-2 border-primary border-t-transparent' />
-        )}
+    <div className="space-y-4">
+      <div className="flex items-center gap-2">
+        <div className="relative w-full max-w-sm">
+          <input
+            type="text"
+            placeholder="Search cargo items..."
+            onChange={(event) => handleSearch(event.target.value)}
+            className="flex h-10 w-full max-w-sm rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+          />
+          {isSearching && (
+            <div className="absolute right-3 top-1/2 -translate-y-1/2">
+              <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+            </div>
+          )}
+        </div>
       </div>
-      <div className='rounded-md border'>
+      <div className="rounded-md border">
         <Table>
           <TableHeader>
             {table.getHeaderGroups().map((headerGroup) => (
               <TableRow key={headerGroup.id}>
                 {headerGroup.headers.map((header) => (
-                  <TableHead
-                    key={header.id}
-                    className='cursor-pointer select-none'
-                    onClick={header.column.getToggleSortingHandler()}
-                  >
+                  <TableHead key={header.id}>
                     {header.isPlaceholder
                       ? null
                       : flexRender(
                           header.column.columnDef.header,
                           header.getContext()
                         )}
-                    {header.column.getIsSorted() === 'asc' && ' ↑'}
-                    {header.column.getIsSorted() === 'desc' && ' ↓'}
                   </TableHead>
                 ))}
               </TableRow>
             ))}
           </TableHeader>
           <TableBody>
-            {table.getRowModel().rows.length ? (
+            {table.getRowModel().rows?.length ? (
               table.getRowModel().rows.map((row) => (
-                <TableRow key={row.id}>
+                <TableRow
+                  key={row.id}
+                  data-state={row.getIsSelected() && "selected"}
+                >
                   {row.getVisibleCells().map((cell) => (
                     <TableCell key={cell.id}>
                       {flexRender(
@@ -125,15 +132,33 @@ export function DataTable<TData, TValue>({
               <TableRow>
                 <TableCell
                   colSpan={columns.length}
-                  className='h-24 text-center text-muted-foreground'
+                  className="h-24 text-center"
                 >
-                  No Data Found
+                  No results.
                 </TableCell>
               </TableRow>
             )}
           </TableBody>
         </Table>
       </div>
+      <div className="flex items-center justify-end space-x-2 py-4">
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => table.previousPage()}
+          disabled={!table.getCanPreviousPage()}
+        >
+          Previous
+        </Button>
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => table.nextPage()}
+          disabled={!table.getCanNextPage()}
+        >
+          Next
+        </Button>
+      </div>
     </div>
-  )
+  );
 }

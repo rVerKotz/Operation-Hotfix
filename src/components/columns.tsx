@@ -1,6 +1,6 @@
 'use client'
 
-import { updateShipmentStatus } from '@/actions/update-status'
+import { updateStatus } from '@/actions/update-status'
 import { StatusBadge } from '@/components/status-badge'
 import { Button } from '@/components/ui/button'
 import {
@@ -15,8 +15,10 @@ import type { Shipment } from '@/types/shipment'
 import { ColumnDef } from '@tanstack/react-table'
 import { MoreHorizontal } from 'lucide-react'
 import { toast } from 'sonner'
+import { normalizeCargoDetails } from "../utils/normalizeCargoDetails.ts";
 
 export const columns: ColumnDef<Shipment>[] = [
+  // ... (accessorKey: 'id' and 'created_at' remain the same)
   {
     accessorKey: 'id',
     header: 'ID',
@@ -43,7 +45,7 @@ export const columns: ColumnDef<Shipment>[] = [
     accessorKey: 'cargo_details',
     header: 'Cargo',
     cell: ({ row }) => {
-      const cargo = row.getValue<Shipment['cargo_details']>('cargo_details')
+      const cargo = normalizeCargoDetails(row.getValue('cargo_details'))
       if (!cargo)
         return <span className='text-sm text-muted-foreground'>—</span>
       return (
@@ -60,9 +62,13 @@ export const columns: ColumnDef<Shipment>[] = [
       const shipment = row.original
 
       const handleStatusUpdate = async (status: string) => {
-        const result = await updateShipmentStatus(shipment.id, status)
+        // Bug 6 Fix: Check result.error and show toast instead of crashing
+        const result = await updateStatus(shipment.id, status as Shipment['status'])
+        
         if (result.success) {
           toast.success('Status updated successfully')
+        } else {
+          toast.error(result.error || 'Failed to update status')
         }
       }
 

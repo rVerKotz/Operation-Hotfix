@@ -1,10 +1,20 @@
 import type { Shipment } from '@/types/shipment'
 
-export function normalizeCargoDetails(
-  cargo: unknown
-): Shipment['cargo_details'] {
-  if (!cargo) return null
-  if (Array.isArray(cargo))
-    return (cargo[0] ?? null) as Shipment['cargo_details']
-  return cargo as Shipment['cargo_details']
+/**
+ * Bug 4 Fix: Normalizes cargo details by handling both direct objects 
+ * and arrays of objects (which the seed data uses).
+ */
+export function normalizeCargoDetails(details: any): Shipment['cargo_details'] {
+  if (!details) return null;
+  
+  // If the data is an array (e.g. from the SQL insert: '[{"item": "..."}]'), 
+  // grab the first element.
+  const data = Array.isArray(details) ? details[0] : details;
+
+  if (!data) return null;
+
+  return {
+    item: data.item || data.item_name || data.itemName || "Unknown Item",
+    weight_kg: data.weight_kg || data.weight || 0
+  };
 }
